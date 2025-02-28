@@ -1,0 +1,20 @@
+start: TITLE DOUBLE_NL introduction DOUBLE_NL TOC (DOUBLE_NL section)+
+
+TITLE: "# " /.+/
+
+introduction: BLOCK
+
+TOC: "[TOC]"
+
+section: SECTION_HEADER (DOUBLE_NL BLOCK)+
+
+SECTION_HEADER : "## " /.+/
+
+BLOCK: /.+/ ( NL /.+/ )*
+
+DOUBLE_NL: /\n\n/
+NL: /\n/
+
+%import common._STRING_INNER -> STRING
+%import common.WS
+
