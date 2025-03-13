@@ -1,0 +1,421 @@
+// Grammar from https://docs.oracle.com/javase/specs/jls/se23/html/jls-19.html
+
+// Applied subset of Google Java Style guide: https://google.github.io/styleguide/javaguide.html
+// The following is the list of guidelines that are applied
+// 2.3.1 Whitespace characters
+// 3.2 Package statement
+// 3.3 Import statements (except 3.3.4: No static import for classes)
+// 4.1 Braces
+// 4.3 One statement per line
+
+?start: compilation_unit
+
+%ignore WS_INLINE
+%ignore TRADITIONAL_COMMENT
+%ignore EOL_COMMENT
+
+// Lexical Structure
+
+literal: int_literal | float_literal | _bool_literal | _char_literal | _string_literal | _null_literal
+
+int_literal: OCT_DIGIT | HEX_DIGIT | BINARY_DIGIT | DECIMAL_DIGIT
+float_literal: DECIMAL_FLOAT | HEX_FLOAT
+_bool_literal: "true" | "false"
+_char_literal: CHAR
+_string_literal: STRING
+_null_literal: NULL
+
+IDENTIFIER: /[a-z_$][0-9a-z_$]*/i
+
+CONST_ID: /[A-Z][A-Z0-9_]*/
+CAMEL_UPPER_ID: /[A-Z][0-9a-zA-Z]*/
+CAMEL_LOWER_ID: /[a-z][0-9a-zA-Z]*/
+
+CHAR: /'([^'\r\n\\]|\\([btnfr"'\\0-7]|[0-3]?[0-7]{2})|\\u[0-9a-fA-f]{4})'/
+STRING: /"([^"\r\n\\]|\\([btnfr"'\\0-7]|[0-3]?[0-7]{2})|\\u[0-9a-fA-f]{4})*"/
+
+// 2.3.1 Whitespace characters: the ASCII horizontal space character (0x20) is the only whitespace character
+WS_INLINE: " "+
+
+// 4.2 Block indentation: +2 spaces
+NEWLINE: "\r"? "\n" "  "*
+
+TRADITIONAL_COMMENT: /\/\*(\*[^\/]|[^*])*\*\//
+EOL_COMMENT: /\/\/([^\r\n]|\\u[0-9a-fA-f]{4})*/
+
+OCT_DIGIT: /0[0-7][0-7_]*l?/i
+HEX_DIGIT: /0x[0-9a-f][0-9a-f]*l?/i
+BINARY_DIGIT: /0b[0-1][0-1_]*l?/i
+DECIMAL_DIGIT: /(0|[1-9][0-9_]*)l?/i
+
+DECIMAL_FLOAT: /([0-9]+\.[0-9]*(e[+-][0-9]+)?[df]?)|(\.[0-9]+(e[+-][0-9]+)?[df]?)|([0-9]+(e[+-][0-9]+)[df]?)|([0-9]+(e[+-][0-9]+)?[df])/i
+HEX_FLOAT: /0x([0-9a-f][0-9a-f]*?\.?(p[+-][0-9]+)|[0-9a-f]*?\.[0-9a-f]+p[+-][0-9]+)/i
+
+NULL: "null"
+
+
+// Names
+
+name: IDENTIFIER ("." IDENTIFIER)*
+
+// Merging annotation rules to prevent conflict
+annotation: "@" name ("(" element_value ("," element_value)* ")")?
+
+element_value_pair_list: element_value_pair ("," element_value_pair)*
+element_value_pair: IDENTIFIER "=" element_value
+?element_value: conditional_expression | element_value_array_initializer | annotation
+element_value_array_initializer: "{" element_value_list ","? "}"
+element_value_list: element_value ("," element_value)*
+
+// Structures
+
+?compilation_unit: ordinary_compilation_unit | modular_compilation_unit
+ordinary_compilation_unit: package_declaration? import_declarations NEWLINE NEWLINE type_declaration*
+modular_compilation_unit: import_declarations module_declaration
+
+package_declaration: annotation* "package" IDENTIFIER ("." IDENTIFIER)* ";" NEWLINE NEWLINE
+
+// 3.3.3 Imports are ordered as follows
+// 1. All static imports in a single block
+// 2. All non-static imports in a single block
+// If there are both static and non-static imports, a single blank line separates the two blocks. 
+// There are no other blank lines between import statements.
+import_declarations: static_import_declaration* 
+                   | non_static_import_declaration* 
+                   | static_import_declaration* NEWLINE non_static_import_declaration*
+
+// 3.3.1 No wildcard imports
+// 3.3.2 No line-wrapping: Import statements are not line-wrapped
+static_import_declaration: "import" "static" name "." IDENTIFIER ";" NEWLINE
+non_static_import_declaration: "import" (name | name "." IDENTIFIER) ";" NEWLINE
+
+?type_declaration: class_declaration | interface_declaration
+
+module_declaration: annotation* "open"? "module" name "{" module_directive* "}"
+module_directive: "requires" _requires_modifier* name ";" NEWLINE
+                | "exports" name ("to" name ("," name)*)? ";" NEWLINE
+                | "opens" name ("to" name ("," name)*)? ";" NEWLINE
+                | "uses" name ";" NEWLINE
+                | "provides" name "with" name ("," name)* ";" NEWLINE
+
+_requires_modifier: "transitive" | "static"
+
+
+// Classes
+
+?class_declaration: normal_class_declaration | enum_declaration
+normal_class_declaration: _class_modifier* "class" IDENTIFIER type_parameters? superclass? superinterfaces? class_body
+enum_declaration: _class_modifier* "enum" IDENTIFIER superinterfaces? enum_body
+
+_class_modifier: annotation | "public" | "protected" | "private" | "abstract" | "static" | "final" | "strictfp"
+
+superclass: "extends" class_type
+superinterfaces: "implements" class_type ("," class_type)*
+
+class_body: "{" NEWLINE class_body_declaration* "}" NEWLINE
+?class_body_declaration: class_member_declaration | _initializer | constructor_declaration
+?class_member_declaration: field_declaration | method_declaration | class_declaration | interface_declaration
+
+field_declaration: _field_modifier* type variable_declarator_list ";"
+method_declaration: _method_modifier* method_header method_body
+
+_field_modifier: annotation | "public" | "protected" | "private" | "static" | "final" | "transient" | "volatile"
+_method_modifier: annotation | "public" | "protected" | "private" | "abstract" | "static" | "final" | "synchronized" | "native" | "strictfp"
+
+variable_declarator_list: variable_declarator ("," variable_declarator)*
+variable_declarator: IDENTIFIER dims? ("=" variable_initializer)?
+?variable_initializer: expression | array_initializer
+
+method_header: (type_parameters annotation*)? result method_declarator throws? 
+
+method_declarator: IDENTIFIER "(" (receiver_parameter ",")? formal_parameter_list? ")" dims?
+receiver_parameter: annotation* type (IDENTIFIER "." NEWLINE?)? "this"
+
+formal_parameter_list: formal_parameter ("," formal_parameter)*
+formal_parameter: _variable_modifier* type IDENTIFIER | variable_arity_parameter
+
+variable_arity_parameter: _variable_modifier* type annotation* "..." IDENTIFIER
+_variable_modifier: annotation | "final"
+
+throws: "throws" exception_type_list
+exception_type_list: exception_type ("," exception_type)*
+?exception_type: class_type
+
+?method_body: block | ";"
+_initializer: "static"? block
+
+constructor_declaration: _constructor_modifier* constructor_declarator throws? constructor_body
+constructor_declarator: type_parameters? IDENTIFIER "(" (receiver_parameter ",")? formal_parameter_list? ")"
+constructor_body: "{" explicit_constructor_invocation? block_statement* "}"
+
+_constructor_modifier: annotation | "public" | "protected" | "private"
+
+explicit_constructor_invocation: type_arguments? ("this" | "super") "(" argument_list? ")" ";"
+                               | name "." NEWLINE? type_arguments? "super" "(" argument_list? ")" ";"
+                               | primary "." NEWLINE? type_arguments? "super" "(" argument_list? ")" ";"
+
+enum_body: "{" enum_constant_list? ","? enum_body_declarations? "}"
+enum_constant_list: enum_constant ("," enum_constant)*
+enum_constant: IDENTIFIER ("(" argument_list? ")")? class_body?
+enum_body_declarations: ";" class_body_declaration*
+
+
+// Interfaces
+
+?interface_declaration: normal_interface_declaration | annotation_type_declaration
+
+normal_interface_declaration: _interface_modifier* "interface" IDENTIFIER type_parameters? extends_interfaces? interface_body
+annotation_type_declaration: _interface_modifier* "@" "interface" IDENTIFIER annotation_type_body
+
+_interface_modifier: annotation | "public" | "protected" | "private" | "abstract" | "static" | "strictfp"
+
+extends_interfaces: "extends" class_type ("," class_type)*
+
+interface_body: "{" interface_member_declaration* "}"
+?interface_member_declaration: constant_declaration
+                             | interface_method_declaration
+                             | class_declaration
+                             | interface_declaration
+                             | ";"
+interface_method_declaration: _interface_method_modifier* method_header method_body
+_interface_method_modifier: annotation | "public" | "private" | "abstract" | "default" | "static" | "strictfp"
+
+constant_declaration: _constant_modifier* type variable_declarator_list ";"
+_constant_modifier: annotation | "public" | "static" | "final"
+
+annotation_type_body: "{" annotation_type_member_declaration? "}"
+
+?annotation_type_member_declaration: annotation_type_element_declaration 
+                                   | constant_declaration 
+                                   | class_declaration
+                                   | interface_declaration
+
+annotation_type_element_declaration: _annotation_type_element_modifier* type IDENTIFIER "(" ")" dims default_value? ";"
+_annotation_type_element_modifier: annotation | "public" | "abstract"
+
+default_value: "default" element_value
+
+// Types
+
+?result: type | "void"
+?type: primitive_type | reference_type
+
+primitive_type: annotation* (numeric_type | "boolean")
+?numeric_type: _integral_type | _floating_point_type
+_integral_type: "byte" | "short" | "int" | "long" | "char"
+_floating_point_type: "float" | "double"
+
+?reference_type: class_type | array_type
+
+class_type: ((name | class_type) ".")? annotation* IDENTIFIER type_arguments?
+array_type: (primitive_type | class_type) dims
+
+dims: annotation* "[" "]" (annotation* "[" "]")*
+
+type_parameters: "<" type_parameter ("," type_parameter)* ">"
+type_parameter: annotation* IDENTIFIER type_bound?
+type_bound: "extends" class_type additional_bound*
+additional_bound: "&" class_type
+
+type_arguments: "<" type_argument ("," type_argument)* ">"
+?type_argument: reference_type | wildcard
+
+wildcard: annotation* "?" wildcard_bound?
+wildcard_bound: ("extends" | "super") reference_type
+
+
+// Arrays
+
+array_initializer: "{" variable_initializer_list? ","? "}"
+variable_initializer_list: variable_initializer ("," variable_initializer)*
+
+
+// Statements
+
+// 4.1.3 Empty blocks: may be concise
+
+?block: empty_block | nonempty_block
+empty_block: "{}"
+nonempty_block: "{" block_statement+ "}"
+
+?block_statement: local_variable_declaration_statement | class_declaration | statement
+
+local_variable_declaration_statement: local_variable_declaration ";"
+local_variable_declaration: _variable_modifier* local_variable_type variable_declarator_list
+?local_variable_type: type | "var"
+
+?statement: statement_without_trailing_substatement 
+          | labeled_statement
+          | if_then_statement
+          | if_then_else_statement
+          | while_statement
+          | for_statement
+
+?statement_without_trailing_substatement: block
+                                        | empty_statement
+                                        | expression_statement
+                                        | assert_statement
+                                        | switch_statement
+                                        | do_statement
+                                        | break_statement
+                                        | continue_statement
+                                        | return_statement
+                                        | synchronized_statement
+                                        | throw_statement
+                                        | try_statement
+
+empty_statement: ";"
+labeled_statement: IDENTIFIER ";" statement
+expression_statement: statement_expression ";" NEWLINE
+
+?statement_expression: assignment
+                     | pre_increment_expression
+                     | pre_decrement_expression
+                     | post_increment_expression
+                     | post_decrement_expression
+                     | method_invocation
+                     | class_instance_creation_expression
+statement_expression_list: statement_expression ("," statement_expression)*
+
+// 4.1.1 Use of optional braces: Braces are used with if, else, for, do and while statements
+
+if_then_statement: "if" "(" expression ")" block NEWLINE
+if_then_else_statement: "if" "(" expression ")" block "else" nonempty_block NEWLINE
+
+assert_statement: "assert" expression ";" NEWLINE | "assert" expression ":" expression ";" NEWLINE
+
+switch_statement: "switch" "(" expression ")" switch_block NEWLINE
+switch_block: "{" switch_block_statement_group* switch_label* "}"
+switch_block_statement_group: switch_label+ block_statement+
+switch_label: "case" constant_expression ":" | "case" IDENTIFIER ":" | "default" ":"
+
+while_statement: "while" "(" expression ")" block NEWLINE
+do_statement: "do" block "while" "(" expression ")" ";" NEWLINE
+?for_statement: basic_for_statement | enhanced_for_statement
+
+basic_for_statement: "for" "(" for_init? ";" expression ";" for_update ")" block NEWLINE
+enhanced_for_statement: "for" "(" _variable_modifier* local_variable_type variable_declarator_id NEWLINE? ":" NEWLINE? expression ")" block NEWLINE
+
+?for_init: statement_expression_list | local_variable_declaration
+?for_update: statement_expression_list
+variable_declarator_id: IDENTIFIER dims?
+
+break_statement: "break" IDENTIFIER? ";" NEWLINE
+continue_statement: "continue" IDENTIFIER? ";" NEWLINE
+return_statement: "return" expression? ";" NEWLINE
+throw_statement: "throw" expression ";" NEWLINE
+synchronized_statement: "synchronized" "(" expression ")" block NEWLINE
+
+?try_statement: "try" block (catches | catches? finally) NEWLINE
+             | try_with_resource_statement
+
+catches: catch_clause+
+catch_clause: "catch" "(" catch_formal_parameter ")" nonempty_block
+catch_formal_parameter: _variable_modifier* catch_type variable_declarator_id
+catch_type: class_type (NEWLINE? "|" class_type)*
+
+finally: "finally" block
+
+try_with_resource_statement: "try" resource_specification block catches? finally? NEWLINE
+
+resource_specification: "(" resource_list ";"? ")"
+resource_list: resource (";" resource)*
+resource: _variable_modifier* local_variable_type IDENTIFIER NEWLINE? "=" NEWLINE? expression
+        | variable_access
+
+?variable_access: name | field_access
+
+// Expressions
+
+?primary: primary_no_new_array | array_creation_expression
+?primary_no_new_array: literal | class_literal 
+                     | "this" 
+                     | name NEWLINE? "." "this"
+                     | "(" expression ")"
+                     | class_instance_creation_expression
+                     | field_access
+                     | array_access
+                     | method_invocation
+                     | method_reference
+
+class_literal: name ("[" "]")* NEWLINE? "." "class"
+             | numeric_type ("[" "]")* NEWLINE? "." "class"
+             | "boolean" ("[" "]")* NEWLINE? "." "class"
+             | "void" NEWLINE? "." "class"
+
+class_instance_creation_expression: ((name | primary) NEWLINE? ".")? "new" type_arguments? class_or_interface_type_to_instantiate "(" argument_list? ")" class_body?
+class_or_interface_type_to_instantiate: IDENTIFIER (NEWLINE? "." IDENTIFIER)* (type_arguments | "<" ">")?
+
+field_access: "primary" NEWLINE? "." IDENTIFIER
+            | "super" NEWLINE? "." IDENTIFIER
+            | name NEWLINE? "." "super" NEWLINE? "." IDENTIFIER
+
+array_access: (name | primary_no_new_array) "[" expression "]"
+
+method_invocation: IDENTIFIER "(" argument_list? ")"
+                 | (name | primary | "super" | name NEWLINE? "." "super") NEWLINE? "." type_arguments? IDENTIFIER "(" argument_list? ")"
+
+method_reference: (name | primary | reference_type | "super" | name NEWLINE? "." "super") NEWLINE? "::" type_arguments? IDENTIFIER
+                | class_type NEWLINE? "::" type_arguments? "new"
+                | array_type NEWLINE? "::" "new"
+
+argument_list: expression ("," expression)*
+
+array_creation_expression: "new" primitive_type dim_expr+ dims?
+                         | "new" class_type dim_expr+ dims?
+                         | "new" primitive_type dims array_initializer
+                         | "new" class_type dims array_initializer
+
+dim_expr: annotation* "[" expression "]"
+
+?expression: lambda_expression | assignment_expression
+
+lambda_expression: lambda_parameters "->" lambda_body
+lambda_parameters: "(" (lambda_parameter ("," lambda_parameter)*  | IDENTIFIER ("," IDENTIFIER)*)? ")" | IDENTIFIER
+
+?lambda_parameter: _variable_modifier* lambda_parameter_type variable_declarator_id
+                | variable_arity_parameter
+?lambda_parameter_type: type | "var"
+?lambda_body: expression | block
+
+?assignment_expression: conditional_expression | assignment
+assignment: left_hand_side NEWLINE? assignment_operator NEWLINE? expression
+assignment_operator: "=" | "*=" | "/=" | "%=" | "+=" | "-="
+                   | "<<=" | ">>=" | ">>>=" | "&=" | "^=" | "|="
+
+?left_hand_side: name | field_access | array_access
+
+conditional_expression: conditional_or_expression ("?" expression ":" (conditional_expression | lambda_expression))?
+conditional_or_expression: conditional_and_expression (NEWLINE? "||" conditional_and_expression)*
+conditional_and_expression: inclusive_or_expression (NEWLINE? "&&" inclusive_or_expression)*
+inclusive_or_expression: exclusive_or_expression (NEWLINE? "|" exclusive_or_expression)*
+exclusive_or_expression: and_expression (NEWLINE? "^" and_expression)*
+and_expression: equality_expression (NEWLINE? "&" equality_expression)*
+equality_expression: relational_expression (NEWLINE? ("==" | "!=") relational_expression)*
+?relational_expression: shift_expression
+                     | relational_expression NEWLINE? ("<" | ">" | "<=" | ">=") shift_expression
+                     | relational_expression NEWLINE? "instanceof" reference_type
+shift_expression: additive_expression (NEWLINE? ("<<" | ">>" | ">>>") additive_expression)*
+additive_expression: multiplicative_expression (NEWLINE? ("+" | "-") multiplicative_expression)*
+multiplicative_expression: unary_expression (NEWLINE? ("*" | "/" | "%") unary_expression)*
+
+?unary_expression: pre_increment_expression
+                 | pre_decrement_expression
+                 | ("+" | "-") unary_expression
+                 | unary_expression_not_plus_minus
+pre_increment_expression: "++" unary_expression
+pre_decrement_expression: "--" unary_expression
+?unary_expression_not_plus_minus: postfix_expression
+                                | "~" unary_expression
+                                | "!" unary_expression
+                                | cast_expression
+
+?postfix_expression: primary | name | post_increment_expression | post_decrement_expression
+post_increment_expression: postfix_expression "++"
+post_decrement_expression: postfix_expression "--"
+
+cast_expression: "(" primitive_type ")" unary_expression
+               | "(" reference_type additional_bound* ")" unary_expression_not_plus_minus
+               | "(" reference_type additional_bound* ")" lambda_expression
+
+?constant_expression: expression
